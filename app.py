@@ -703,6 +703,99 @@ def explain_analysis():
     })
 
 
+# ═══════════════════════════════════════════════════════════
+#  POST /ask — 계산된 분석 결과에 대한 사용자 추가 질문 질의응답 (Q&A)
+# ═══════════════════════════════════════════════════════════
+@app.route("/ask", methods=["POST"])
+def ask():
+    """사용자가 분석 결과를 보고 추가로 궁금한 점을 질문하면,
+    current_dataset['last_run'] (Pandas 계산 결과)만을 바탕으로
+    환각 없이 정확하게 답변한다.
+    """
+    body = request.get_json(silent=True) or {}
+    question = body.get("question", "").strip()
+
+    logger.info("[REQUEST]  POST /ask question=%s", question)
+
+    if not question:
+        logger.warning("[ERROR]    질문 내용 누락")
+        return jsonify({"error": "질문 내용을 입력해주세요."}), 400
+
+    run_res = current_dataset["last_run"]
+    diag = current_dataset["diagnosis"]
+
+    if run_res is None:
+        logger.warning("[ERROR]    /run 결과 없이 ask 요청")
+        return jsonify({"error": "질문 대상인 분석 결과가 없습니다. 먼저 분석 도구를 실행해주세요."}), 400
+
+    if not GEMINI_API_KEY:
+        logger.error("[ERROR]    GEMINI_API_KEY 미설정")
+        return jsonify({"error": "Gemini API Key가 설정되지 않았습니다."}), 500
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    # 계산 결과 요약 (차트 객체 제외, 순수 수치와 메타정보만 전달)
+    clean_calc_result = {
+        "tool": run_res.get("tool"),
+        "reference_period": run_res.get("reference_period"),
+        "used_rows": run_res.get("used_rows"),
+        "excluded_rows": run_res.get("excluded_rows"),
+        "excluded_reasons": run_res.get("excluded_reasons"),
+        "used_columns": run_res.get("used_columns"),
+        "unit": run_res.get("unit"),
+        "caution": run_res.get("caution"),
+        "result_numbers": run_res.get("result")
+    }
+
+    meta_info = {
+        "dataset_name": diag.get("filename", "World Bank WDI Data") if diag else "World Bank WDI Data",
+        "indicator_name": "Individuals using the Internet (% of population)",
+        "unit": run_res.get("unit", "%")
+    }
+
+    system_instruction = (
+        "당신은 공공 데이터 전문 수석 데이터 사이언티스트입니다.\n"
+        "사용자가 방금 실행된 데이터 분석 결과에 대해 추가 질문을 했습니다.\n"
+        "반드시 아래 제공된 'Pandas 계산 결과' 수치와 메타데이터만을 근거로 사실에 입각하여 답변하십시오.\n\n"
+        "### 준수 규칙:\n"
+        "1. 제공된 'Pandas 계산 결과'에 명시된 숫자와 사실만을 인용하십시오. 임의로 계산하거나 추측하지 마십시오.\n"
+        "2. 계산 결과에 등장하지 않는 국가, 연도, 외부 배경지식(정치, 경제 등)에 대해 묻는 경우, "
+        "\"이 데이터(계산 결과)로는 확인할 수 없습니다\"라고 솔직하게 답변하십시오.\n"
+        "3. 상관관계를 인과관계로 비약하지 마십시오.\n"
+        "4. 수치를 인용할 때는 핵심 숫자를 볼드체(**숫자**)로 강조하고 단위를 명확히 붙여주십시오.\n"
+        "5. 중학생도 이해하기 쉽게 친절하고 명확한 한국어로 마크다운 형식을 사용하여 3~5문장 내외로 간결하게 답변하십시오."
+    )
+
+    user_prompt = (
+        f"### 지표 메타데이터:\n{json.dumps(meta_info, ensure_ascii=False, indent=2)}\n\n"
+        f"### 방금 계산된 분석 결과 (수치 데이터):\n{json.dumps(clean_calc_result, ensure_ascii=False, indent=2)}\n\n"
+        f"### 사용자 질문:\n{question}\n\n"
+        f"위 계산 결과에 근거하여 사용자의 질문에 정확하고 명쾌하게 답변해주세요."
+    )
+
+    logger.info("[AI]       ask 질문 분석 및 답변 생성 시작")
+
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=f"{system_instruction}\n\n{user_prompt}",
+            config=types.GenerateContentConfig(temperature=0.2)
+        )
+        answer_text = response.text.strip()
+        logger.info("[AI]       ask 응답 수신 완료")
+    except Exception as e:
+        logger.error("[ERROR]    ask 답변 생성 실패: %s", e, exc_info=True)
+        return jsonify({"error": f"답변 생성 실패: {str(e)}"}), 500
+
+    logger.info("[RESPONSE] status=ok question_len=%d answer_len=%d", len(question), len(answer_text))
+    return jsonify({
+        "status": "ok",
+        "question": question,
+        "answer": answer_text
+    })
+
+
+
 
 # ═══════════════════════════════════════════════════════════
 if __name__ == "__main__":

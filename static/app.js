@@ -142,6 +142,22 @@ function bindEvents() {
     document.getElementById("btn-manual-run").addEventListener("click", runManualTool);
     // AI 해석 생성 버튼
     document.getElementById("btn-explain").addEventListener("click", runExplain);
+    // Q&A 폼 제출
+    const qaForm = document.getElementById("qa-form");
+    if (qaForm) {
+        qaForm.addEventListener("submit", handleQaSubmit);
+    }
+    // Q&A 추천 질문 칩 클릭
+    document.querySelectorAll(".qa-chip").forEach(chip => {
+        chip.addEventListener("click", () => {
+            const q = chip.getAttribute("data-question");
+            const qaInput = document.getElementById("qa-input");
+            if (qaInput) {
+                qaInput.value = q;
+                sendQaQuestion(q);
+            }
+        });
+    });
 }
 
 // ── 4. 진단(/inspect) 실행 ─────────────────────────────────
@@ -347,6 +363,12 @@ function renderResult(data) {
     const resSection = document.getElementById("result-section");
     resSection.style.display = "block";
     resSection.scrollIntoView({ behavior: "smooth" });
+
+    // 4. 결과에 대한 Q&A 섹션 표시
+    const qaSection = document.getElementById("qa-section");
+    if (qaSection) {
+        qaSection.style.display = "block";
+    }
 }
 
 // Chart.js 인터랙티브 차트 렌더링
@@ -534,3 +556,84 @@ function escapeHtml(str) {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
 }
+
+// ── 7. 데이터 결과 추가 질문 Q&A 핸들러 ──────────────────────
+function handleQaSubmit(e) {
+    e.preventDefault();
+    const qaInput = document.getElementById("qa-input");
+    const question = qaInput.value.trim();
+    if (!question) return;
+    sendQaQuestion(question);
+}
+
+async function sendQaQuestion(question) {
+    const qaInput = document.getElementById("qa-input");
+    const btnSubmit = document.getElementById("btn-qa-submit");
+    const chatBox = document.getElementById("qa-chat-box");
+    const loadingElem = document.getElementById("qa-loading");
+
+    // 사용자 메시지 추가
+    appendChatMessage("user", question);
+    qaInput.value = "";
+    qaInput.disabled = true;
+    btnSubmit.disabled = true;
+    loadingElem.style.display = "flex";
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    console.log(`[QA]      질문 요청 시작: "${question}"`);
+
+    try {
+        const res = await fetch("/ask", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question: question })
+        });
+        const data = await res.json();
+        loadingElem.style.display = "none";
+        qaInput.disabled = false;
+        btnSubmit.disabled = false;
+        qaInput.focus();
+
+        if (!res.ok) {
+            throw new Error(data.error || "답변을 가져오지 못했습니다.");
+        }
+
+        console.log(`[QA]      답변 수신 완료 (길이: ${data.answer ? data.answer.length : 0})`);
+        appendChatMessage("ai", data.answer);
+    } catch (err) {
+        loadingElem.style.display = "none";
+        qaInput.disabled = false;
+        btnSubmit.disabled = false;
+        console.error(`[ERROR]   QA 오류: ${err.message}`);
+        appendChatMessage("ai", `⚠️ 오류가 발생했습니다: ${escapeHtml(err.message)}`);
+    }
+
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function appendChatMessage(sender, text) {
+    const chatBox = document.getElementById("qa-chat-box");
+    const msgDiv = document.createElement("div");
+    msgDiv.className = `qa-message ${sender === "user" ? "qa-user" : "qa-ai"}`;
+
+    const avatarDiv = document.createElement("div");
+    avatarDiv.className = "qa-avatar";
+    avatarDiv.textContent = sender === "user" ? "👤" : "🤖";
+
+    const bubbleDiv = document.createElement("div");
+    bubbleDiv.className = "qa-bubble";
+
+    if (sender === "user") {
+        const p = document.createElement("p");
+        p.textContent = text;
+        bubbleDiv.appendChild(p);
+    } else {
+        renderMarkdown(text, bubbleDiv);
+    }
+
+    msgDiv.appendChild(avatarDiv);
+    msgDiv.appendChild(bubbleDiv);
+    chatBox.appendChild(msgDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+

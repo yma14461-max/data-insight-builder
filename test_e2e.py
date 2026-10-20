@@ -90,6 +90,15 @@ for h in required_headers:
     print(f"     {h}: {'통과 (OK)' if has_h else '누락 (FAIL)'}")
     assert has_h, f"누락된 헤더: {h}"
 
+# 7. 데이터 결과에 대한 추가 질문 (POST /ask)
+print("\n[Step 7] POST /ask (추가 질문 질의응답)")
+question = "상위 1위 국가와 2위 국가의 차이는 얼마인가요?"
+r_ask = client.post("/ask", json={"question": question})
+assert r_ask.status_code == 200, f"Ask failed: {r_ask.text}"
+d_ask = r_ask.get_json()
+print(f"  ✓ 질문: {d_ask.get('question')}")
+print(f"  ✓ 답변: {d_ask.get('answer')}")
+
 print("\n" + "=" * 60)
-print("  🎉 전체 6단계 엔드투엔드 파이프라인 100% 통과 완료!")
+print("  🎉 전체 엔드투엔드 파이프라인 (Q&A 포함) 100% 통과 완료!")
 print("=" * 60)
