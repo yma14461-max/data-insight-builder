@@ -1,0 +1,21 @@
+# 환경변수 및 민감 정보 (API 키 노출 방지)
+.env
+
+# 가상환경
+venv/
+env/
+ENV/
+
+# Python 캐시 파일
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE 및 OS 임시 파일
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 로그 파일
+*.log
