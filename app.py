@@ -7,8 +7,9 @@ import os
 import io
 import json
 import logging
+from datetime import timedelta
 import pandas as pd
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, session, send_from_directory
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -17,10 +18,12 @@ import tools
 # ── 환경변수 로드 ──────────────────────────────────────────
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL   = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
-FLASK_DEBUG    = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-MAX_UPLOAD_MB  = int(os.getenv("MAX_UPLOAD_MB", "10"))
+GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL    = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+FLASK_DEBUG     = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+MAX_UPLOAD_MB   = int(os.getenv("MAX_UPLOAD_MB", "10"))
+SECRET_KEY      = os.getenv("SECRET_KEY", "data-insight-builder-secure-pin-0208")
+ACCESS_PASSWORD = os.getenv("APP_PASSWORD", "0208")  # 보안 접속 비밀번호
 
 # ── 로깅 설정 ─────────────────────────────────────────────
 logging.basicConfig(
@@ -30,9 +33,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Flask 앱 생성 ─────────────────────────────────────────
+# ── Flask 앱 생성 및 세션 보안 설정 ───────────────────────
 app = Flask(__name__)
+app.config["SECRET_KEY"] = SECRET_KEY
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)  # 모바일 편의를 위해 30일간 유지
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # ── 메모리에 보관할 데이터셋 (1개만) ──────────────────────
 current_dataset = {
@@ -41,6 +48,82 @@ current_dataset = {
     "diagnosis": None,    # /inspect 진단 결과
     "last_run": None,     # /run 마지막 실행 결과
 }
+
+
+# ═══════════════════════════════════════════════════════════
+#  보안 인증 미들웨어 (before_request)
+# ═══════════════════════════════════════════════════════════
+@app.before_request
+def check_authentication():
+    """정적 리소스, PWA 파일, 메인 페이지, 헬스체크 및 로그인 API는 열어두고,
+    실제 데이터 및 Gemini AI 호출 엔드포인트는 세션 인증(0208) 필수 적용
+    """
+    path = request.path
+
+    # 인증 없이 접근 가능한 공개 경로들
+    public_paths = [
+        "/", "/health", "/auth/login", "/auth/status", "/manifest.json", "/sw.js", "/favicon.ico"
+    ]
+    if path in public_paths or path.startswith("/static/"):
+        return None
+
+    # 데이터 분석/AI API 경로 보호 (/inspect, /suggest, /run, /explain, /ask, /query)
+    if not session.get("authenticated"):
+        logger.warning("[AUTH]     미인증 접근 차단: %s", path)
+        return jsonify({
+            "error": "보안 인증이 필요합니다. 비밀번호(0208)를 입력해주세요.",
+            "auth_required": True
+        }), 401
+
+
+# ═══════════════════════════════════════════════════════════
+#  인증 API (POST /auth/login, GET /auth/status, POST /auth/logout)
+# ═══════════════════════════════════════════════════════════
+@app.route("/auth/login", methods=["POST"])
+def auth_login():
+    """비밀번호 검증 및 세션 부여 (비밀번호: 0208)"""
+    body = request.get_json(silent=True) or {}
+    password = str(body.get("password", "")).strip()
+
+    if password == ACCESS_PASSWORD:
+        session["authenticated"] = True
+        session.permanent = True
+        logger.info("[AUTH]     비밀번호 인증 성공")
+        return jsonify({"status": "ok", "message": "인증 성공"})
+    else:
+        logger.warning("[AUTH]     비밀번호 불일치 시도: %s", password)
+        return jsonify({"error": "비밀번호가 올바르지 않습니다."}), 401
+
+
+@app.route("/auth/status", methods=["GET"])
+def auth_status():
+    """현재 브라우저의 인증 상태 반환"""
+    return jsonify({
+        "authenticated": bool(session.get("authenticated"))
+    })
+
+
+@app.route("/auth/logout", methods=["POST"])
+def auth_logout():
+    """로그아웃"""
+    session.clear()
+    logger.info("[AUTH]     로그아웃 완료")
+    return jsonify({"status": "ok"})
+
+
+# ═══════════════════════════════════════════════════════════
+#  PWA 전용 라우트 (manifest.json, sw.js)
+# ═══════════════════════════════════════════════════════════
+@app.route("/manifest.json")
+def pwa_manifest():
+    return send_from_directory("static", "manifest.json", mimetype="application/manifest+json")
+
+
+@app.route("/sw.js")
+def pwa_service_worker():
+    response = send_from_directory("static", "sw.js", mimetype="application/javascript")
+    response.headers["Service-Worker-Allowed"] = "/"
+    return response
 
 
 # ═══════════════════════════════════════════════════════════
@@ -57,6 +140,7 @@ def health():
         "gemini_model": GEMINI_MODEL,
         "max_upload_mb": MAX_UPLOAD_MB,
         "dataset_loaded": current_dataset["df"] is not None,
+        "auth_enabled": True
     }
 
     logger.info("[RESPONSE] status=%s api_key_set=%s model=%s",

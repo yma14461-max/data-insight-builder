@@ -22,12 +22,38 @@ print(f"  ✓ 상태: {d_health.get('status')}")
 print(f"  ✓ API 키 설정됨: {d_health.get('gemini_api_key_set')}")
 print(f"  ✓ 모델: {d_health.get('gemini_model')}")
 
+# 1.5. 보안 인증(PIN: 0208) 및 PWA 엔드포인트 검증
+print("\n[Step 1.5] 보안 인증 (PIN: 0208) 및 PWA 엔드포인트 검증")
+# (1) 미인증 상태에서 보호된 API 접근 시 401 차단 확인
+r_blocked = client.post("/suggest")
+assert r_blocked.status_code == 401, "Unauthenticated access should be blocked"
+print("  ✓ 미인증 API 접근 차단 확인 (401 Unauthorized)")
+
+# (2) 잘못된 비밀번호 시도
+r_wrong = client.post("/auth/login", json={"password": "wrong"})
+assert r_wrong.status_code == 401, "Wrong password should fail"
+print("  ✓ 잘못된 비밀번호 차단 확인 (401)")
+
+# (3) 올바른 비밀번호(0208) 인증 성공
+r_login = client.post("/auth/login", json={"password": "0208"})
+assert r_login.status_code == 200, "0208 login should succeed"
+print("  ✓ 비밀번호 '0208' 세션 인증 성공 (200 OK)")
+
+# (4) PWA manifest 및 sw.js 접근 확인
+r_manifest = client.get("/manifest.json")
+assert r_manifest.status_code == 200, "Manifest load failed"
+r_sw = client.get("/sw.js")
+assert r_sw.status_code == 200, "SW load failed"
+print("  ✓ PWA manifest.json 및 sw.js 서빙 확인")
+
 # 2. 메인 화면
 print("\n[Step 2] GET / (메인 UI)")
 r_index = client.get("/")
 assert r_index.status_code == 200, "Index load failed"
 assert "AI Data Insight Builder" in r_index.text, "Title missing"
-print("  ✓ 메인 HTML 및 Chart.js CDN 로드 성공")
+assert "auth-overlay" in r_index.text, "Auth overlay missing"
+assert "manifest.json" in r_index.text, "Manifest link missing"
+print("  ✓ 메인 HTML, PWA 메타태그 및 보안 잠금 모달 로드 성공")
 
 # 3. CSV 업로드 및 진단
 print("\n[Step 3] POST /inspect (World Bank WDI 인터넷 보급률)")

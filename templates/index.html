@@ -2,25 +2,75 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>AI Data Insight Builder</title>
+    
+    <!-- PWA 및 모바일(iOS Chrome/Safari) 설정 -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="DataInsight">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+    <link rel="icon" type="image/png" href="/static/icons/icon-192.png">
+
     <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <!-- 🔒 0단계: 보안 비밀번호 잠금 화면 (PIN: 0208) -->
+    <div class="auth-overlay" id="auth-overlay" style="display: none;">
+        <div class="auth-card">
+            <div class="auth-lock-icon">🔒</div>
+            <h2>보안 접근 인증</h2>
+            <p class="auth-desc">Google Gemini API 보안 및 데이터 보호를 위해<br>보안 비밀번호를 입력해주세요.</p>
+            
+            <form class="auth-form" id="auth-form">
+                <div class="pin-input-group">
+                    <input type="password" id="auth-pin-input" class="auth-pin-input" maxlength="10" placeholder="비밀번호(4자리) 입력" autocomplete="off" inputmode="numeric" autofocus />
+                    <button type="submit" class="btn btn-primary auth-btn" id="btn-auth-submit">잠금 해제</button>
+                </div>
+                <div class="auth-error-msg" id="auth-error-msg" style="display: none;">⚠️ 비밀번호가 올바르지 않습니다.</div>
+            </form>
+        </div>
+    </div>
+
     <header class="app-header">
         <div class="header-container">
             <div class="header-title-group">
                 <h1>📊 AI Data Insight Builder</h1>
                 <p class="subtitle">공식 통계 CSV 업로드 → 진단 → AI 도구 추천 → Pandas 계산 → Gemini 해석</p>
             </div>
-            <div class="status-badge" id="server-status-badge">
-                <span class="status-dot online"></span>
-                <span id="server-status-text">서버 연결 확인 중...</span>
+            <div class="header-actions">
+                <button type="button" class="btn-pwa-install" id="btn-pwa-guide" title="아이폰 홈 화면 앱 설치 가이드">📱 앱으로 설치</button>
+                <div class="status-badge" id="server-status-badge">
+                    <span class="status-dot online"></span>
+                    <span id="server-status-text">서버 연결 확인 중...</span>
+                </div>
+                <button type="button" class="btn-logout" id="btn-logout" title="로그아웃" style="display: none;">🔒 잠금</button>
             </div>
         </div>
     </header>
+
+    <!-- 📱 iOS 홈 화면 앱 추가 가이드 모달 -->
+    <div class="pwa-guide-modal" id="pwa-guide-modal" style="display: none;">
+        <div class="pwa-guide-content">
+            <div class="pwa-guide-header">
+                <h3>📱 아이폰 홈 화면에 앱으로 설치하는 방법</h3>
+                <button type="button" class="btn-close-modal" id="btn-close-pwa-guide">&times;</button>
+            </div>
+            <div class="pwa-guide-body">
+                <p>아이폰에서 앱처럼 편리하게 사용하실 수 있습니다:</p>
+                <ol>
+                    <li>아이폰 <strong>크롬(Chrome)</strong> 또는 <strong>사파리(Safari)</strong> 주소창 옆의 <strong>[공유]</strong> 아이콘(상자에서 위로 뻗은 화살표 📤)을 누릅니다.</li>
+                    <li>메뉴에서 아래로 스크롤하여 <strong>[홈 화면에 추가] (Add to Home Screen)</strong>를 누릅니다.</li>
+                    <li>우측 상단의 <strong>[추가]</strong>를 누르면 홈 화면에 <strong>DataInsight</strong> 아이콘 앱이 생성됩니다!</li>
+                </ol>
+                <button type="button" class="btn btn-primary" id="btn-confirm-pwa-guide" style="width: 100%; margin-top: 10px;">확인했습니다</button>
+            </div>
+        </div>
+    </div>
 
     <main class="main-container">
         <!-- ── 1단계: CSV 파일 업로드 섹션 ──────────────────── -->

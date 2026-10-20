@@ -40,11 +40,91 @@ const TOOL_OPTIONS = [
 // ── 1. 페이지 로드 초기화 ──────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
     console.log("[PAGE]    페이지 로드 완료");
+    registerServiceWorker();
+    checkAuthStatus();
     initHealthCheck();
     initDropZone();
     initManualToolOptions();
     bindEvents();
 });
+
+// PWA 서비스 워커 등록
+function registerServiceWorker() {
+    if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("/sw.js")
+            .then(reg => console.log("[PWA]     ServiceWorker 등록 성공 (scope:", reg.scope, ")"))
+            .catch(err => console.log("[PWA]     ServiceWorker 등록 실패:", err));
+    }
+}
+
+// ── 🔒 보안 인증 상태 확인 및 잠금 해제 (PIN: 0208) ────────
+async function checkAuthStatus() {
+    try {
+        const res = await fetch("/auth/status");
+        const data = await res.json();
+        const overlay = document.getElementById("auth-overlay");
+        const btnLogout = document.getElementById("btn-logout");
+
+        if (data.authenticated) {
+            overlay.style.display = "none";
+            if (btnLogout) btnLogout.style.display = "inline-flex";
+            console.log("[AUTH]    인증된 세션 확인됨");
+        } else {
+            overlay.style.display = "flex";
+            if (btnLogout) btnLogout.style.display = "none";
+            const pinInput = document.getElementById("auth-pin-input");
+            if (pinInput) setTimeout(() => pinInput.focus(), 200);
+            console.log("[AUTH]    잠금 상태 (0208 인증 필요)");
+        }
+    } catch (e) {
+        console.error("[ERROR]   인증 상태 확인 실패:", e);
+    }
+}
+
+async function handleAuthSubmit(e) {
+    e.preventDefault();
+    const pinInput = document.getElementById("auth-pin-input");
+    const errorMsg = document.getElementById("auth-error-msg");
+    const enteredPin = pinInput.value.trim();
+
+    if (!enteredPin) return;
+
+    try {
+        const res = await fetch("/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: enteredPin })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.status === "ok") {
+            errorMsg.style.display = "none";
+            document.getElementById("auth-overlay").style.display = "none";
+            const btnLogout = document.getElementById("btn-logout");
+            if (btnLogout) btnLogout.style.display = "inline-flex";
+            pinInput.value = "";
+            console.log("[AUTH]    비밀번호 인증 완료 (잠금 해제)");
+        } else {
+            errorMsg.textContent = data.error || "비밀번호가 올바르지 않습니다.";
+            errorMsg.style.display = "block";
+            pinInput.value = "";
+            pinInput.focus();
+        }
+    } catch (e) {
+        errorMsg.textContent = "인증 서버 통신 실패";
+        errorMsg.style.display = "block";
+    }
+}
+
+async function handleLogout() {
+    if (!confirm("보안을 위해 화면을 잠그시겠습니까?")) return;
+    try {
+        await fetch("/auth/logout", { method: "POST" });
+        checkAuthStatus();
+    } catch (e) {
+        console.error("[ERROR]   로그아웃 실패:", e);
+    }
+}
 
 // 서버 상태 확인
 async function initHealthCheck() {
@@ -179,6 +259,31 @@ function bindEvents() {
     const btnToggleVisual = document.getElementById("btn-toggle-nlq-chart");
     if (btnToggleVisual) {
         btnToggleVisual.addEventListener("click", toggleNlqVisualization);
+    }
+
+    // ── 🔒 보안 비밀번호 인증 폼 및 로그아웃 ─────────────────
+    const authForm = document.getElementById("auth-form");
+    if (authForm) {
+        authForm.addEventListener("submit", handleAuthSubmit);
+    }
+    const btnLogout = document.getElementById("btn-logout");
+    if (btnLogout) {
+        btnLogout.addEventListener("click", handleLogout);
+    }
+
+    // ── 📱 PWA 앱 설치 가이드 모달 ───────────────────────────
+    const btnPwaGuide = document.getElementById("btn-pwa-guide");
+    const pwaModal = document.getElementById("pwa-guide-modal");
+    const btnClosePwa = document.getElementById("btn-close-pwa-guide");
+    const btnConfirmPwa = document.getElementById("btn-confirm-pwa-guide");
+
+    if (btnPwaGuide && pwaModal) {
+        btnPwaGuide.addEventListener("click", () => {
+            pwaModal.style.display = "flex";
+        });
+        [btnClosePwa, btnConfirmPwa].forEach(btn => {
+            if (btn) btn.addEventListener("click", () => pwaModal.style.display = "none");
+        });
     }
 }
 
