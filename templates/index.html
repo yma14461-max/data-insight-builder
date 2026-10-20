@@ -188,32 +188,43 @@
                         <h3 class="nlq-query-title" id="nlq-query-title">"질문 내용"</h3>
                     </div>
                     <div class="nlq-answer-body report-box" id="nlq-answer-body"></div>
+
+                    <!-- 📊 시각화 그래프 보기 토글 버튼 -->
+                    <div class="nlq-action-bar">
+                        <button type="button" class="btn btn-primary btn-lg btn-visual-toggle" id="btn-toggle-nlq-chart">
+                            <span class="btn-visual-icon">📊</span>
+                            <span class="btn-visual-text">맞춤 시각화 그래프 확인하기</span>
+                        </button>
+                    </div>
                 </div>
 
-                <div class="result-summary-bar">
-                    <span class="summary-pill">실행 도구: <strong id="res-tool-name">-</strong></span>
-                    <span class="summary-pill">기준 시점: <strong id="res-ref-period">-</strong></span>
-                    <span class="summary-pill">사용한 행: <strong id="res-used-rows">-</strong></span>
-                    <span class="summary-pill">제외된 행: <strong id="res-excluded-rows">-</strong></span>
-                </div>
+                <!-- 시각화 및 결과 컨테이너 (버튼으로 토글 가능) -->
+                <div class="result-visualization-area" id="result-visual-area">
+                    <div class="result-summary-bar">
+                        <span class="summary-pill">실행 도구: <strong id="res-tool-name">-</strong></span>
+                        <span class="summary-pill">기준 시점: <strong id="res-ref-period">-</strong></span>
+                        <span class="summary-pill">사용한 행: <strong id="res-used-rows">-</strong></span>
+                        <span class="summary-pill">제외된 행: <strong id="res-excluded-rows">-</strong></span>
+                    </div>
 
-                <div class="exclusion-note" id="res-exclusion-reason">
-                    <strong>제외 사유:</strong> <span>-</span>
-                </div>
+                    <div class="exclusion-note" id="res-exclusion-reason">
+                        <strong>제외 사유:</strong> <span>-</span>
+                    </div>
 
-                <!-- 차트 영역 -->
-                <div class="chart-container" id="chart-wrapper">
-                    <canvas id="insight-chart"></canvas>
-                </div>
+                    <!-- 차트 영역 -->
+                    <div class="chart-container" id="chart-wrapper">
+                        <canvas id="insight-chart"></canvas>
+                    </div>
 
-                <!-- 결과 데이터 표 -->
-                <div class="result-table-container">
-                    <h3>수치 결과 상세</h3>
-                    <div class="table-scroll" id="result-table-wrapper">
-                        <table class="data-table" id="result-table">
-                            <thead id="result-thead"></thead>
-                            <tbody id="result-tbody"></tbody>
-                        </table>
+                    <!-- 결과 데이터 표 -->
+                    <div class="result-table-container">
+                        <h3>수치 결과 상세</h3>
+                        <div class="table-scroll" id="result-table-wrapper">
+                            <table class="data-table" id="result-table">
+                                <thead id="result-thead"></thead>
+                                <tbody id="result-tbody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 

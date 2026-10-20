@@ -174,6 +174,12 @@ function bindEvents() {
             }
         });
     });
+
+    // ── 시각화 그래프 토글 버튼 ──────────────────────────────
+    const btnToggleVisual = document.getElementById("btn-toggle-nlq-chart");
+    if (btnToggleVisual) {
+        btnToggleVisual.addEventListener("click", toggleNlqVisualization);
+    }
 }
 
 // ── 4. 진단(/inspect) 실행 ─────────────────────────────────
@@ -424,6 +430,30 @@ async function executeNlq(query) {
     }
 }
 
+// 시각화 영역 토글 함수
+function toggleNlqVisualization() {
+    const visualArea = document.getElementById("result-visual-area");
+    const btn = document.getElementById("btn-toggle-nlq-chart");
+    const iconSpan = btn.querySelector(".btn-visual-icon");
+    const textSpan = btn.querySelector(".btn-visual-text");
+
+    if (visualArea.style.display === "none") {
+        visualArea.style.display = "block";
+        if (iconSpan) iconSpan.textContent = "📈";
+        if (textSpan) textSpan.textContent = "맞춤 시각화 그래프 접기";
+
+        // 차트 렌더링 실행
+        if (state.lastRunResult && state.lastRunResult.chart_data) {
+            renderChart(state.lastRunResult.chart_data);
+        }
+        visualArea.scrollIntoView({ behavior: "smooth" });
+    } else {
+        visualArea.style.display = "none";
+        if (iconSpan) iconSpan.textContent = "📊";
+        if (textSpan) textSpan.textContent = "맞춤 시각화 그래프 확인하기";
+    }
+}
+
 function renderResult(data, nlqInfo = null) {
     document.getElementById("res-tool-name").textContent = data.tool;
     document.getElementById("res-ref-period").textContent = data.reference_period || "전체";
@@ -432,30 +462,41 @@ function renderResult(data, nlqInfo = null) {
     document.getElementById("res-exclusion-reason").querySelector("span").textContent = data.excluded_reasons || "제외 없음";
     document.getElementById("badge-used-rows").textContent = `${data.used_rows}개 행 계산 완료`;
 
-    // 자연어 브리핑 카드 처리
     const nlqCard = document.getElementById("nlq-answer-card");
+    const visualArea = document.getElementById("result-visual-area");
+    const btnToggleVisual = document.getElementById("btn-toggle-nlq-chart");
+
+    // 수치 테이블 렌더링
+    renderResultTable(data.result);
+
     if (nlqInfo) {
+        // 자연어 질의로 실행된 경우: 브리핑 카드 표시 + 시각화 영역은 버튼 클릭 시 열리도록 기본 숨김
         nlqCard.style.display = "block";
         document.getElementById("nlq-badge-tool").textContent = `도구: ${nlqInfo.tool_name}`;
         document.getElementById("nlq-intent-text").textContent = `분석 의도: ${nlqInfo.intent}`;
         document.getElementById("nlq-query-title").textContent = `"${nlqInfo.query}"`;
         renderMarkdown(nlqInfo.answer, document.getElementById("nlq-answer-body"));
+
+        visualArea.style.display = "none";
+        if (btnToggleVisual) {
+            const iconSpan = btnToggleVisual.querySelector(".btn-visual-icon");
+            const textSpan = btnToggleVisual.querySelector(".btn-visual-text");
+            if (iconSpan) iconSpan.textContent = "📊";
+            if (textSpan) textSpan.textContent = "맞춤 시각화 그래프 확인하기";
+        }
     } else {
+        // 일반 도구 실행의 경우: 브리핑 카드 숨김 + 시각화 영역 즉시 표시
         nlqCard.style.display = "none";
+        visualArea.style.display = "block";
+        renderChart(data.chart_data);
     }
 
-    // 1. 차트 렌더링
-    renderChart(data.chart_data);
-
-    // 2. 수치 테이블 렌더링
-    renderResultTable(data.result);
-
-    // 3. 결과 섹션 표시
+    // 결과 섹션 표시
     const resSection = document.getElementById("result-section");
     resSection.style.display = "block";
     resSection.scrollIntoView({ behavior: "smooth" });
 
-    // 4. 결과에 대한 Q&A 섹션 표시
+    // 결과에 대한 Q&A 섹션 표시
     const qaSection = document.getElementById("qa-section");
     if (qaSection) {
         qaSection.style.display = "block";
