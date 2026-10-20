@@ -92,8 +92,49 @@
                     </div>
                 </div>
 
-                <div class="section-action">
-                    <button class="btn btn-primary btn-lg" id="btn-suggest">🤖 AI 분석 제안 요청하기</button>
+                <div class="section-action" style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <a href="#nlq-section" class="btn btn-primary btn-lg" onclick="document.getElementById('nlq-input').focus();">💬 자연어로 직접 질문하기</a>
+                    <button class="btn btn-secondary btn-lg" id="btn-suggest">🤖 AI 분석 제안 목록 보기</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── 2.5단계: 자연어 질문 기반 실시간 맞춤 분석 (NLQ) ────── -->
+        <section class="card nlq-card" id="nlq-section" style="display: none;">
+            <div class="card-header">
+                <h2>💬 데이터 자연어 질의 & 맞춤형 자동 시각화</h2>
+                <span class="badge badge-ai">Gemini Intent Mapping + Pandas 계산</span>
+            </div>
+            <div class="card-body">
+                <p class="section-desc">
+                    데이터에 대해 알고 싶은 내용을 일상적인 한국어로 질문해보세요.<br>
+                    AI가 질문 의도에 맞춰 <strong>최적의 분석 도구와 시각화 차트를 자동으로 구성</strong>하고, 실제 계산 수치에 근거하여 상세히 답변합니다.
+                </p>
+
+                <!-- 추천 질문 예시 칩 -->
+                <div class="nlq-chips" id="nlq-chips">
+                    <span class="nlq-chip-label">✨ 추천 질문:</span>
+                    <button type="button" class="nlq-chip" data-query="한국, 미국, 일본의 2015년부터 2024년까지 인터넷 보급률 추이 비교해줘">한국·미국·일본 시계열 추이 비교 (선 차트)</button>
+                    <button type="button" class="nlq-chip" data-query="2024년 기준 인터넷 보급률 상위 10개국과 하위 10개국 순위 보여줘">2024년 상·하위 10개국 랭킹 (막대)</button>
+                    <button type="button" class="nlq-chip" data-query="2015년과 2024년 사이 가장 높은 성장을 보인 국가 상위 10개 분석해줘">최근 10년간 최고 성장률 국가 (막대)</button>
+                    <button type="button" class="nlq-chip" data-query="한국(Korea, Rep.)의 2024년 보급률을 전체 평균 및 중앙값과 비교해줘">한국 vs 전체 평균·중앙값 대비 (강조 막대)</button>
+                    <button type="button" class="nlq-chip" data-query="2024년 데이터의 구간별 빈도 분포(히스토그램)와 기초 통계량 요약해줘">2024년 구간별 분포 및 기초 통계</button>
+                </div>
+
+                <!-- 자연어 질의 입력 폼 -->
+                <form class="nlq-form" id="nlq-form">
+                    <div class="nlq-input-wrapper">
+                        <input type="text" id="nlq-input" class="nlq-input" placeholder="궁금한 내용을 자유롭게 입력하세요 (예: 2020년 이후 한국과 미국의 보급률 변화를 비교해서 보여줘)" autocomplete="off" />
+                        <button type="submit" class="btn btn-primary btn-lg" id="btn-nlq-submit">
+                            <span>🚀 맞춤 분석 & 시각화 실행</span>
+                        </button>
+                    </div>
+                </form>
+
+                <!-- NLQ 로딩 상태 -->
+                <div class="loading-spinner" id="nlq-loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <span>질문 의도를 분석하여 최적의 Pandas 도구로 계산하고 차트를 그리는 중입니다...</span>
                 </div>
             </div>
         </section>
@@ -101,11 +142,11 @@
         <!-- ── 3단계: AI 분석 제안 목록 ──────────────────────── -->
         <section class="card" id="suggest-section" style="display: none;">
             <div class="card-header">
-                <h2>3. AI 분석 제안 목록</h2>
+                <h2>3. AI 추천 분석 목록</h2>
                 <span class="badge badge-ai">12개 도구 카탈로그 기반</span>
             </div>
             <div class="card-body">
-                <p class="section-desc">데이터 진단 결과에 맞춰 Gemini가 추천한 실행 가능한 분석들입니다. 원하는 분석을 선택하세요.</p>
+                <p class="section-desc">데이터 진단 결과에 맞춰 Gemini가 추천한 실행 가능한 분석들입니다. 원하는 분석 카드를 선택하면 즉시 실행됩니다.</p>
                 <div class="loading-spinner" id="suggest-loading" style="display: none;">
                     <div class="spinner"></div>
                     <span>Gemini가 도구 카탈로그에서 최적의 분석을 선별 중입니다...</span>
@@ -133,10 +174,22 @@
         <!-- ── 4단계: 분석 결과 & 차트 ──────────────────────── -->
         <section class="card" id="result-section" style="display: none;">
             <div class="card-header">
-                <h2>4. Pandas 계산 결과 및 시각화</h2>
+                <h2>4. 데이터 분석 결과 & 맞춤형 시각화 차트</h2>
                 <span class="badge badge-calc" id="badge-used-rows">계산 완료</span>
             </div>
             <div class="card-body">
+                <!-- 자연어 질의 답변 브리핑 카드 (질문으로 실행된 경우 표시) -->
+                <div class="nlq-answer-card" id="nlq-answer-card" style="display: none;">
+                    <div class="nlq-answer-header">
+                        <div class="nlq-badge-row">
+                            <span class="badge badge-success" id="nlq-badge-tool">도구: -</span>
+                            <span class="nlq-intent-text" id="nlq-intent-text">분석 의도: -</span>
+                        </div>
+                        <h3 class="nlq-query-title" id="nlq-query-title">"질문 내용"</h3>
+                    </div>
+                    <div class="nlq-answer-body report-box" id="nlq-answer-body"></div>
+                </div>
+
                 <div class="result-summary-bar">
                     <span class="summary-pill">실행 도구: <strong id="res-tool-name">-</strong></span>
                     <span class="summary-pill">기준 시점: <strong id="res-ref-period">-</strong></span>

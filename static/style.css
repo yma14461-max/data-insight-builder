@@ -443,6 +443,120 @@ body {
     border-left: 3px solid var(--warning);
 }
 
+/* ── 2.5단계: 자연어 질의(NLQ) 섹션 ─────────────────────── */
+.nlq-card {
+    border-color: #93c5fd;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.08);
+}
+
+.nlq-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background-color: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: var(--radius-sm);
+}
+
+.nlq-chip-label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.nlq-chip {
+    background-color: #ffffff;
+    border: 1px solid #93c5fd;
+    color: #1e40af;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.nlq-chip:hover {
+    background-color: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.nlq-form {
+    margin-top: 10px;
+}
+
+.nlq-input-wrapper {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.nlq-input {
+    flex: 1;
+    padding: 14px 18px;
+    font-size: 1rem;
+    border: 2px solid #cbd5e1;
+    border-radius: var(--radius-md);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.nlq-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+}
+
+/* ── NLQ 답변 브리핑 카드 (결과 섹션 내부) ─────────────────── */
+.nlq-answer-card {
+    background-color: #ffffff;
+    border: 1px solid #93c5fd;
+    border-left: 5px solid var(--primary);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow-sm);
+}
+
+.nlq-answer-header {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 14px;
+    margin-bottom: 16px;
+}
+
+.nlq-badge-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.nlq-intent-text {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.nlq-query-title {
+    font-size: 1.1875rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+.nlq-answer-body {
+    background: transparent;
+    border: none;
+    padding: 0;
+    box-shadow: none;
+    font-size: 0.9375rem;
+}
+
 /* ── 수동 도구 아코디언 ───────────────────────────────────── */
 .manual-tool-accordion {
     border: 1px solid var(--border-color);

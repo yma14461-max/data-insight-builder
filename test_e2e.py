@@ -97,8 +97,20 @@ r_ask = client.post("/ask", json={"question": question})
 assert r_ask.status_code == 200, f"Ask failed: {r_ask.text}"
 d_ask = r_ask.get_json()
 print(f"  ✓ 질문: {d_ask.get('question')}")
-print(f"  ✓ 답변: {d_ask.get('answer')}")
+print(f"  ✓ 답변 (길이 {len(d_ask.get('answer'))}자): {d_ask.get('answer')[:120]}...")
+
+# 8. 자연어 질의 기반 맞춤 분석 & 자동 시각화 (POST /query)
+print("\n[Step 8] POST /query (자연어로 질문하고 맞춤 시각화·답변 생성)")
+nl_query = "한국과 미국의 2015년부터 2024년까지 인터넷 보급률 추이 비교해줘"
+r_query = client.post("/query", json={"query": nl_query})
+assert r_query.status_code == 200, f"Query failed: {r_query.text}"
+d_query = r_query.get_json()
+print(f"  ✓ 자연어 질문: \"{d_query.get('query')}\"")
+print(f"  ✓ 매핑된 도구: {d_query.get('tool_used')} ({d_query.get('tool_name')})")
+print(f"  ✓ 분석 의도: {d_query.get('intent')}")
+print(f"  ✓ 차트 타입: {d_query.get('run_result', {}).get('chart_data', {}).get('type')}")
+print(f"  ✓ 답변 브리핑 (길이 {len(d_query.get('answer'))}자): {d_query.get('answer')[:120]}...")
 
 print("\n" + "=" * 60)
-print("  🎉 전체 엔드투엔드 파이프라인 (Q&A 포함) 100% 통과 완료!")
+print("  🎉 전체 엔드투엔드 파이프라인 (자연어 질의 & 시각화 포함) 100% 통과 완료!")
 print("=" * 60)

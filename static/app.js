@@ -158,6 +158,22 @@ function bindEvents() {
             }
         });
     });
+
+    // ── 2.5단계: 자연어 질의(NLQ) 폼 및 칩 이벤트 ─────────
+    const nlqForm = document.getElementById("nlq-form");
+    if (nlqForm) {
+        nlqForm.addEventListener("submit", handleNlqSubmit);
+    }
+    document.querySelectorAll(".nlq-chip").forEach(chip => {
+        chip.addEventListener("click", () => {
+            const q = chip.getAttribute("data-query");
+            const input = document.getElementById("nlq-input");
+            if (input) {
+                input.value = q;
+                executeNlq(q);
+            }
+        });
+    });
 }
 
 // ── 4. 진단(/inspect) 실행 ─────────────────────────────────
@@ -220,6 +236,12 @@ function renderDiagnosis(data) {
     const diagSection = document.getElementById("diagnosis-section");
     diagSection.style.display = "block";
     diagSection.scrollIntoView({ behavior: "smooth" });
+
+    // 자연어 질문(NLQ) 섹션도 함께 노출
+    const nlqSection = document.getElementById("nlq-section");
+    if (nlqSection) {
+        nlqSection.style.display = "block";
+    }
 }
 
 function renderPreviewTable(records) {
@@ -345,13 +367,82 @@ async function executeTool(toolName, params, refPeriod) {
     }
 }
 
-function renderResult(data) {
+// ── 6.5. 자연어 질의(NLQ) 실행 ─────────────────────────────
+function handleNlqSubmit(e) {
+    e.preventDefault();
+    const input = document.getElementById("nlq-input");
+    const query = input.value.trim();
+    if (!query) {
+        alert("질문할 내용을 입력해주세요.");
+        return;
+    }
+    executeNlq(query);
+}
+
+async function executeNlq(query) {
+    console.log(`[NLQ]     자연어 분석 요청 시작: "${query}"`);
+    const spinner = document.getElementById("nlq-loading");
+    const btnSubmit = document.getElementById("btn-nlq-submit");
+    const input = document.getElementById("nlq-input");
+
+    spinner.style.display = "flex";
+    btnSubmit.disabled = true;
+    input.disabled = true;
+
+    try {
+        const res = await fetch("/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: query })
+        });
+        const data = await res.json();
+        spinner.style.display = "none";
+        btnSubmit.disabled = false;
+        input.disabled = false;
+
+        if (!res.ok) {
+            throw new Error(data.error || "자연어 분석 실행에 실패했습니다.");
+        }
+
+        console.log(`[NLQ]     분석 완료 (도구: ${data.tool_used}, 의도: ${data.intent})`);
+        state.lastRunResult = data.run_result;
+
+        // 결과 화면 및 맞춤형 차트 렌더링 + 상단 브리핑 카드 출력
+        renderResult(data.run_result, {
+            query: data.query,
+            tool_name: data.tool_name,
+            intent: data.intent,
+            answer: data.answer
+        });
+
+    } catch (err) {
+        spinner.style.display = "none";
+        btnSubmit.disabled = false;
+        input.disabled = false;
+        console.error(`[ERROR]   자연어 질의 오류: ${err.message}`);
+        alert(`자연어 질의 분석 오류: ${err.message}`);
+    }
+}
+
+function renderResult(data, nlqInfo = null) {
     document.getElementById("res-tool-name").textContent = data.tool;
     document.getElementById("res-ref-period").textContent = data.reference_period || "전체";
     document.getElementById("res-used-rows").textContent = `${data.used_rows.toLocaleString()}개`;
     document.getElementById("res-excluded-rows").textContent = `${data.excluded_rows.toLocaleString()}개`;
     document.getElementById("res-exclusion-reason").querySelector("span").textContent = data.excluded_reasons || "제외 없음";
     document.getElementById("badge-used-rows").textContent = `${data.used_rows}개 행 계산 완료`;
+
+    // 자연어 브리핑 카드 처리
+    const nlqCard = document.getElementById("nlq-answer-card");
+    if (nlqInfo) {
+        nlqCard.style.display = "block";
+        document.getElementById("nlq-badge-tool").textContent = `도구: ${nlqInfo.tool_name}`;
+        document.getElementById("nlq-intent-text").textContent = `분석 의도: ${nlqInfo.intent}`;
+        document.getElementById("nlq-query-title").textContent = `"${nlqInfo.query}"`;
+        renderMarkdown(nlqInfo.answer, document.getElementById("nlq-answer-body"));
+    } else {
+        nlqCard.style.display = "none";
+    }
 
     // 1. 차트 렌더링
     renderChart(data.chart_data);

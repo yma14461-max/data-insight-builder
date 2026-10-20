@@ -567,6 +567,258 @@ def run_tool():
     return jsonify(result)
 
 
+# ═══════════════════════════════════════════════════════════
+#  POST /query — 자연어 질문 기반 도구 자동 매핑, Pandas 계산, 맞춤형 시각화 및 답변 생성
+# ═══════════════════════════════════════════════════════════
+@app.route("/query", methods=["POST"])
+def natural_language_query():
+    """사용자가 자연어로 질문하면:
+    1. Gemini가 질문 의도를 파악하여 최적의 분석 도구(12개 중 1개)와 파라미터를 결정
+    2. 순수 Pandas로 정확하게 계산하고 동적 차트 데이터를 생성
+    3. 계산된 수치 결과에만 철저히 근거하여 전문가 답변 브리핑을 작성
+    4. 분석 결과와 차트, 답변을 한 번에 반환
+    """
+    logger.info("[REQUEST]  POST /query")
+
+    if current_dataset["df"] is None:
+        logger.warning("[ERROR]    데이터셋이 로드되지 않음")
+        return jsonify({"error": "분석할 데이터셋이 없습니다. 먼저 CSV 파일을 업로드해주세요."}), 400
+
+    body = request.get_json(silent=True) or {}
+    query = body.get("query", "").strip()
+
+    if not query:
+        logger.warning("[ERROR]    자연어 질문 내용 누락")
+        return jsonify({"error": "질문 내용을 입력해주세요."}), 400
+
+    if not GEMINI_API_KEY:
+        logger.error("[ERROR]    GEMINI_API_KEY 미설정")
+        return jsonify({"error": "Gemini API Key가 설정되지 않았습니다."}), 500
+
+    df = current_dataset["df"]
+    diag = current_dataset["diagnosis"] or {}
+
+    year_cols = tools.find_year_columns(df)
+    label_col = tools.find_label_column(df)
+    rec_year = diag.get("recommended_reference_year") or (year_cols[-1] if year_cols else "2024")
+
+    # 데이터셋의 실제 국가/개체 레이블 샘플 (매핑 지원용)
+    all_labels = df[label_col].dropna().astype(str).tolist() if label_col in df.columns else []
+    sample_labels = all_labels[:40]
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    # ── 1단계: 자연어 질문 → 도구 및 파라미터 매핑 ──────────
+    tool_specs = {
+        "top_bottom_n": {
+            "description": "특정 기준연도의 상위 N개, 하위 N개 순위 랭킹 비교 (수평 막대)",
+            "params": {
+                "reference_period": f"연도 문자열 (예: '{rec_year}')",
+                "n": "추출할 개수 (정수, 기본 10)",
+                "mode": "'both'(상하위 모두), 'top'(상위만), 'bottom'(하위만)"
+            }
+        },
+        "trend_line": {
+            "description": "선택한 국가/개체들의 연도별 시계열 추이 비교 (선 차트)",
+            "params": {
+                "entities": "국가/개체명 리스트 (예: ['Korea, Rep.', 'United States', 'Japan'])",
+                "year_columns": "연도 문자열 리스트 (선택사항, 기본은 전체 연도)"
+            }
+        },
+        "change_rate": {
+            "description": "두 시점 사이의 절대 변화량(%p) 및 성장률(%) 분석 (막대)",
+            "params": {
+                "start_period": "시작 연도 문자열 (예: '2015')",
+                "reference_period": f"종료/기준 연도 문자열 (예: '{rec_year}')",
+                "n": "추출할 개수 (기본 10)"
+            }
+        },
+        "compare_one_vs_all": {
+            "description": "특정 한 개체(예: 한국)와 전체 평균 및 중앙값 비교 (막대)",
+            "params": {
+                "target_entity": "비교할 단일 국가명 (예: 'Korea, Rep.')",
+                "reference_period": f"기준 연도 문자열 (예: '{rec_year}')"
+            }
+        },
+        "distribution": {
+            "description": "특정 기준연도 수치의 구간별 빈도 분포 분석 (히스토그램)",
+            "params": {
+                "reference_period": f"기준 연도 문자열 (예: '{rec_year}')",
+                "bins": "구간 수 (기본 5 또는 10)"
+            }
+        },
+        "describe_numeric": {
+            "description": "기준연도 수치의 7대 기초 통계량 요약 (평균, 중앙값, 사분위수 등)",
+            "params": {
+                "reference_period": f"기준 연도 문자열 (예: '{rec_year}')"
+            }
+        },
+        "correlation_scatter": {
+            "description": "두 연도 또는 두 변수 간 상관계수 분석 (산점도)",
+            "params": {
+                "var_x": "x축 연도 문자열 (예: '2015')",
+                "reference_period": f"y축/기준 연도 문자열 (예: '{rec_year}')"
+            }
+        },
+        "group_summary": {
+            "description": "수치 사분위수 또는 범주형 그룹별 요약 통계",
+            "params": {
+                "reference_period": f"기준 연도 문자열 (예: '{rec_year}')"
+            }
+        }
+    }
+
+    intent_prompt = (
+        "당신은 공공 데이터 분석 시스템의 자연어 질의 분석 엔진입니다.\n"
+        "사용자의 질문을 면밀히 분석하여, 질문에 가장 적합한 분석 도구 1개와 정확한 파라미터를 JSON으로 반환하십시오.\n\n"
+        "### 사용 가능한 도구 목록 및 스펙:\n"
+        f"{json.dumps(tool_specs, ensure_ascii=False, indent=2)}\n\n"
+        "### 데이터셋 메타데이터:\n"
+        f"- 사용 가능한 연도 목록: {year_cols[-15:] if len(year_cols) > 15 else year_cols}\n"
+        f"- 권장 기준연도: {rec_year}\n"
+        f"- 데이터셋의 실제 국가명 표기 예시: {sample_labels[:20]}\n"
+        "  (주의: 한국은 'Korea, Rep.', 미국은 'United States', 일본은 'Japan' 등으로 표기되어 있습니다)\n\n"
+        "### 사용자 질문:\n"
+        f"\"{query}\"\n\n"
+        "### 반드시 아래 JSON 형식으로만 응답하십시오:\n"
+        "{\n"
+        '  "tool": "선택된 도구 ID (위 목록 중 정확히 하나)",\n'
+        '  "params": { "파라미터명": 값 },\n'
+        '  "intent": "사용자의 질문 의도와 분석 목적을 한 줄로 요약"\n'
+        "}"
+    )
+
+    logger.info("[AI]       자연어 질의 도구 매핑 시작: %s", query)
+
+    try:
+        mapping_res = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=intent_prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.1
+            )
+        )
+        mapping_text = mapping_res.text.strip()
+        parsed_intent = json.loads(mapping_text)
+        chosen_tool = parsed_intent.get("tool", "top_bottom_n")
+        chosen_params = parsed_intent.get("params", {})
+        analysis_intent = parsed_intent.get("intent", f"{query} 분석")
+        logger.info("[AI]       매핑 성공: 도구=%s, 의도=%s", chosen_tool, analysis_intent)
+    except Exception as e:
+        logger.error("[ERROR]    도구 매핑 실패: %s, 기본 도구로 대체", e)
+        chosen_tool = "top_bottom_n"
+        chosen_params = {"reference_period": rec_year, "n": 10, "exclude_aggregates": True}
+        analysis_intent = "기준연도 상위 및 하위 순위 분석"
+
+    # 도구 유효성 검증
+    if chosen_tool not in tools.TOOL_CATALOG:
+        chosen_tool = "top_bottom_n"
+
+    import inspect
+
+    tool_meta = tools.TOOL_CATALOG[chosen_tool]
+    func = tool_meta["func"]
+    func_sig = inspect.signature(func)
+    valid_param_names = set(func_sig.parameters.keys())
+
+    # 기준시점 누락 시 보정
+    if tool_meta.get("requires_reference_period", False) and not chosen_params.get("reference_period"):
+        chosen_params["reference_period"] = rec_year
+
+    # trend_line 연도 범위 지원 (start_year ~ end_year -> year_columns 변환)
+    if chosen_tool == "trend_line":
+        start_y = chosen_params.get("start_year") or chosen_params.get("start_period")
+        end_y = chosen_params.get("end_year") or chosen_params.get("reference_period") or chosen_params.get("end_period")
+        if start_y and end_y:
+            filtered_years = [y for y in year_cols if str(start_y) <= str(y) <= str(end_y)]
+            if filtered_years:
+                chosen_params["year_columns"] = filtered_years
+
+    # 집계행 제외 파라미터가 유효한 함수에만 전달
+    if "exclude_aggregates" in valid_param_names and "exclude_aggregates" not in chosen_params:
+        chosen_params["exclude_aggregates"] = True
+
+    # 함수 시그니처에 정의된 파라미터만 안전하게 필터링
+    safe_params = {k: v for k, v in chosen_params.items() if k in valid_param_names}
+
+    # ── 2단계: 순수 Pandas 계산 실행 ────────────────────────
+    try:
+        run_result = func(df, **safe_params)
+    except Exception as e:
+        logger.error("[ERROR]    도구 실행 실패 (%s): %s", chosen_tool, e, exc_info=True)
+        # 안전한 폴백: top_bottom_n 실행
+        run_result = tools.top_bottom_n(df, reference_period=rec_year, n=10, exclude_aggregates=True)
+        chosen_tool = "top_bottom_n"
+        tool_meta = tools.TOOL_CATALOG[chosen_tool]
+
+    if isinstance(run_result, dict) and "error" in run_result:
+        logger.warning("[ERROR]    도구 실행 에러 반환: %s", run_result.get("error"))
+        run_result = tools.top_bottom_n(df, reference_period=rec_year, n=10, exclude_aggregates=True)
+        chosen_tool = "top_bottom_n"
+        tool_meta = tools.TOOL_CATALOG[chosen_tool]
+
+    # 메모리에 마지막 실행 결과 보관
+    current_dataset["last_run"] = run_result
+
+    # ── 3단계: 계산된 수치 결과에 기반한 전문가 답변 브리핑 생성 ─
+    clean_calc_result = {
+        "tool": run_result.get("tool"),
+        "reference_period": run_result.get("reference_period"),
+        "used_rows": run_result.get("used_rows"),
+        "excluded_rows": run_result.get("excluded_rows"),
+        "excluded_reasons": run_result.get("excluded_reasons"),
+        "used_columns": run_result.get("used_columns"),
+        "unit": run_result.get("unit"),
+        "caution": run_result.get("caution"),
+        "result_numbers": run_result.get("result")
+    }
+
+    answer_instruction = (
+        "당신은 공공 데이터 전문 수석 데이터 사이언티스트입니다.\n"
+        "사용자가 자연어로 데이터 분석을 요청하여, 시스템이 질문에 맞는 최적의 Pandas 도구를 실행하고 차트 시각화를 완성했습니다.\n"
+        "반드시 제공된 'Pandas 계산 결과' 수치에만 근거하여, 질문에 대한 전문적이고 친절한 상세 브리핑을 작성하십시오.\n\n"
+        "### 4대 구조화된 답변 형식:\n"
+        "1. 📌 **핵심 결론 (Direct Answer)**: 사용자의 질문에 대한 가장 핵심적인 답변과 주요 수치\n"
+        "2. 📊 **상세 수치 및 비교 분석 (Detailed Analysis)**: 계산된 핵심 수치(1위, 비교 국가값, 증감률, 격차 등)를 정확한 숫자로 제시\n"
+        "3. 💡 **시각화 차트 안내 및 데이터 맥락 (Visualization & Context)**: 아래 생성된 차트에서 주목해서 볼 포인트와 데이터의 의미 설명\n"
+        "4. ⚠️ **해석상 유의점 (Caveats)**: 제외된 행(결측치, 지역 집계행)과 데이터상 한계점 명시\n\n"
+        "### 필수 규칙:\n"
+        "- 모든 숫자는 반드시 제공된 계산 결과의 숫자만 인용하고 **볼드체**로 강조하십시오.\n"
+        "- 제공되지 않은 외부 지식은 단정하지 마십시오."
+    )
+
+    answer_prompt = (
+        f"### 사용자 자연어 질문: \"{query}\"\n"
+        f"### 분석 의도: {analysis_intent}\n"
+        f"### 실행된 도구: {chosen_tool} ({tool_meta['name']})\n\n"
+        f"### Pandas 계산 결과 수치:\n{json.dumps(clean_calc_result, ensure_ascii=False, indent=2)}\n\n"
+        "위 계산 결과에 근거하여 사용자에게 전문가 수준의 맞춤 브리핑 답변을 작성해주세요."
+    )
+
+    try:
+        ans_res = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=f"{answer_instruction}\n\n{answer_prompt}",
+            config=types.GenerateContentConfig(temperature=0.2)
+        )
+        answer_text = ans_res.text.strip()
+    except Exception as e:
+        logger.error("[ERROR]    자연어 브리핑 생성 실패: %s", e)
+        answer_text = f"분석이 성공적으로 완료되었습니다. 선택된 도구: **{tool_meta['name']}**이며, 결과는 아래 차트 및 수치 표에서 확인하실 수 있습니다."
+
+    logger.info("[RESPONSE] status=ok tool=%s answer_len=%d", chosen_tool, len(answer_text))
+    return jsonify({
+        "status": "ok",
+        "query": query,
+        "tool_used": chosen_tool,
+        "tool_name": tool_meta["name"],
+        "intent": analysis_intent,
+        "answer": answer_text,
+        "run_result": run_result
+    })
+
+
 
 # ═══════════════════════════════════════════════════════════
 #  POST /explain — Gemini 기반 결과 해석 (모드 A/B)
