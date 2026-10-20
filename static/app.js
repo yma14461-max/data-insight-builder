@@ -517,14 +517,19 @@ function renderMarkdown(mdText, targetElem) {
     let html = mdText
         // 줄바꿈 통일
         .replace(/\r\n/g, "\n")
-        // 헤더 2
+        // 구분선 (---)
+        .replace(/^---$/gim, '<hr class="qa-hr">')
+        // 헤더 2, 3, 4
         .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-        // 헤더 3
         .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^#### (.*$)/gim, '<h4>$1</h4>')
+        // 인라인 코드
+        .replace(/`([^`]+)`/gim, '<code>$1</code>')
         // 볼드
         .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-        // 목록
-        .replace(/^\- (.*$)/gim, '<li>$1</li>')
+        // 번호 목록 및 일반 목록
+        .replace(/^\d+\.\s+(.*$)/gim, '<li>$1</li>')
+        .replace(/^\-\s+(.*$)/gim, '<li>$1</li>')
         // 인용구
         .replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
 
@@ -537,7 +542,7 @@ function renderMarkdown(mdText, targetElem) {
     const paragraphs = html.split(/\n{2,}/);
     html = paragraphs.map(p => {
         p = p.trim();
-        if (p.startsWith('<h') || p.startsWith('<ul') || p.startsWith('<block')) {
+        if (p.startsWith('<h') || p.startsWith('<ul') || p.startsWith('<block') || p.startsWith('<hr')) {
             return p;
         }
         return `<p>${p.replace(/\n/g, '<br>')}</p>`;

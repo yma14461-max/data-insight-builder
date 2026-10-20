@@ -788,6 +788,38 @@ body {
     font-weight: 700;
 }
 
+.qa-bubble h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 14px 0 8px 0;
+    color: var(--primary);
+}
+
+.qa-bubble h3:first-child {
+    margin-top: 0;
+}
+
+.qa-bubble h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 10px 0 6px 0;
+}
+
+.qa-bubble code {
+    background-color: #f1f5f9;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: #e11d48;
+}
+
+.qa-bubble .qa-hr {
+    border: 0;
+    height: 1px;
+    background-color: #e2e8f0;
+    margin: 14px 0;
+}
+
 .qa-user .qa-bubble strong {
     color: #ffffff;
 }
