@@ -506,6 +506,8 @@ function renderResult(data, nlqInfo = null) {
 // Chart.js 인터랙티브 차트 렌더링
 function renderChart(chartData) {
     const canvas = document.getElementById("insight-chart");
+    const chartWrapper = document.getElementById("chart-wrapper");
+    const scrollHint = document.getElementById("chart-scroll-hint");
     const ctx = canvas.getContext("2d");
 
     if (state.chartInstance) {
@@ -514,12 +516,32 @@ function renderChart(chartData) {
     }
 
     if (!chartData || !chartData.datasets || chartData.datasets.length === 0) {
-        document.getElementById("chart-wrapper").style.display = "none";
+        chartWrapper.style.display = "none";
+        if (scrollHint) scrollHint.style.display = "none";
         return;
     }
 
-    document.getElementById("chart-wrapper").style.display = "block";
+    chartWrapper.style.display = "block";
     const chartType = chartData.type || "bar";
+    const isHorizontal = chartData.indexAxis === "y";
+    const labelCount = chartData.labels ? chartData.labels.length : 0;
+
+    // ── 동적 높이 계산 (항목이 많을 때 촘촘해지는 문제 해결) ──
+    // 항목 1개당 약 28px의 넉넉한 높이를 확보하여 글자와 막대가 겹치지 않게 함
+    if (isHorizontal && labelCount > 10) {
+        const dynamicHeight = Math.max(450, labelCount * 28 + 60);
+        canvas.style.height = `${dynamicHeight}px`;
+        canvas.height = dynamicHeight;
+        chartWrapper.style.maxHeight = "580px";
+        chartWrapper.style.overflowY = "auto";
+        if (scrollHint) scrollHint.style.display = "flex";
+    } else {
+        canvas.style.height = "400px";
+        canvas.height = 400;
+        chartWrapper.style.maxHeight = "480px";
+        chartWrapper.style.overflowY = "visible";
+        if (scrollHint) scrollHint.style.display = "none";
+    }
 
     const config = {
         type: chartType,
@@ -532,7 +554,9 @@ function renderChart(chartData) {
                 borderColor: ds.borderColor || "#2563eb",
                 borderWidth: 1.5,
                 tension: ds.tension !== undefined ? ds.tension : 0.2,
-                fill: ds.fill !== undefined ? ds.fill : false
+                fill: ds.fill !== undefined ? ds.fill : false,
+                barThickness: isHorizontal ? (labelCount > 25 ? 16 : 20) : undefined,
+                maxBarThickness: 24
             }))
         },
         options: {
@@ -542,7 +566,10 @@ function renderChart(chartData) {
             plugins: {
                 legend: {
                     display: true,
-                    position: "top"
+                    position: "top",
+                    labels: {
+                        font: { size: 12, weight: 'bold' }
+                    }
                 },
                 tooltip: {
                     padding: 10,
@@ -551,18 +578,25 @@ function renderChart(chartData) {
             },
             scales: chartType === "pie" ? {} : {
                 x: {
-                    grid: { color: "#f1f5f9" }
+                    grid: { color: "#f1f5f9" },
+                    ticks: {
+                        font: { size: 11 }
+                    }
                 },
                 y: {
-                    grid: { color: "#f1f5f9" },
-                    beginAtZero: true
+                    grid: { color: "#f8fafc" },
+                    beginAtZero: true,
+                    ticks: {
+                        autoSkip: false, // 40개 항목도 라벨 생략 없이 모두 표시
+                        font: { size: labelCount > 25 ? 11 : 12 }
+                    }
                 }
             }
         }
     };
 
     state.chartInstance = new Chart(ctx, config);
-    console.log(`[CHART]   차트 렌더 완료 (차트 종류: ${chartType})`);
+    console.log(`[CHART]   차트 렌더 완료 (종류: ${chartType}, 항목 수: ${labelCount})`);
 }
 
 function renderResultTable(resObj) {

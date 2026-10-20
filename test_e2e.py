@@ -111,6 +111,17 @@ print(f"  ✓ 분석 의도: {d_query.get('intent')}")
 print(f"  ✓ 차트 타입: {d_query.get('run_result', {}).get('chart_data', {}).get('type')}")
 print(f"  ✓ 답변 브리핑 (길이 {len(d_query.get('answer'))}자): {d_query.get('answer')[:120]}...")
 
+# 9. 상위 10개국 + 하위 30개국 대량 항목 질의 검증 (POST /query)
+print("\n[Step 9] POST /query (상위 10개국과 하위 30개국 대량 항목 시각화)")
+user_query_40 = "2024년 기준 인터넷 보급률 상위 10개국과 하위 30개국 순위 보여줘"
+r_query_40 = client.post("/query", json={"query": user_query_40})
+assert r_query_40.status_code == 200, f"Query 40 failed: {r_query_40.text}"
+d_query_40 = r_query_40.get_json()
+chart_labels_cnt = len(d_query_40.get("run_result", {}).get("chart_data", {}).get("labels", []))
+print(f"  ✓ 질문: \"{user_query_40}\"")
+print(f"  ✓ 매핑 도구: {d_query_40.get('tool_used')}")
+print(f"  ✓ 생성된 차트 항목 수: {chart_labels_cnt}개 (상하위 색상 분리 및 스크롤 최적화)")
+
 print("\n" + "=" * 60)
-print("  🎉 전체 엔드투엔드 파이프라인 (자연어 질의 & 시각화 포함) 100% 통과 완료!")
+print("  🎉 전체 엔드투엔드 파이프라인 (대량 항목 최적화 포함) 100% 통과 완료!")
 print("=" * 60)

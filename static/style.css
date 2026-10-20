@@ -665,13 +665,30 @@ body {
 .chart-container {
     position: relative;
     width: 100%;
-    min-height: 380px;
-    max-height: 480px;
+    min-height: 400px;
+    max-height: 600px;
+    overflow-y: auto;
+    overflow-x: hidden;
     margin-bottom: 28px;
-    padding: 16px;
+    padding: 16px 20px;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
     background-color: #ffffff;
+    box-shadow: var(--shadow-sm);
+}
+
+.chart-scroll-hint {
+    display: none;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    font-size: 0.8125rem;
+    color: var(--primary);
+    background-color: #eff6ff;
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 10px;
+    font-weight: 500;
 }
 
 /* ── 해석 컨트롤 및 모드 선택기 ──────────────────────────── */

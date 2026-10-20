@@ -614,7 +614,9 @@ def natural_language_query():
             "description": "특정 기준연도의 상위 N개, 하위 N개 순위 랭킹 비교 (수평 막대)",
             "params": {
                 "reference_period": f"연도 문자열 (예: '{rec_year}')",
-                "n": "추출할 개수 (정수, 기본 10)",
+                "n": "기본 추출 개수 (정수, 기본 10)",
+                "top_n": "상위에서 추출할 개수 (예: 상위 10개면 10)",
+                "bottom_n": "하위에서 추출할 개수 (예: 하위 30개면 30)",
                 "mode": "'both'(상하위 모두), 'top'(상위만), 'bottom'(하위만)"
             }
         },
@@ -725,6 +727,18 @@ def natural_language_query():
     # 기준시점 누락 시 보정
     if tool_meta.get("requires_reference_period", False) and not chosen_params.get("reference_period"):
         chosen_params["reference_period"] = rec_year
+
+    # top_bottom_n 상·하위 개수 정밀 추출 및 mode=both 보정
+    if chosen_tool == "top_bottom_n":
+        import re
+        top_match = re.search(r'상위\s*(\d+)', query)
+        bottom_match = re.search(r'하위\s*(\d+)', query)
+        if top_match:
+            chosen_params["top_n"] = int(top_match.group(1))
+        if bottom_match:
+            chosen_params["bottom_n"] = int(bottom_match.group(1))
+        if ("상위" in query and "하위" in query) or (top_match and bottom_match):
+            chosen_params["mode"] = "both"
 
     # trend_line 연도 범위 지원 (start_year ~ end_year -> year_columns 변환)
     if chosen_tool == "trend_line":

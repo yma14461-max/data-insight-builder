@@ -522,7 +522,7 @@ def trend_line(df, entities=None, label_column=None, year_columns=None, unit="%"
 # ═══════════════════════════════════════════════════════════════════
 #  도구 7: top_bottom_n — 기준연도 기준 상위·하위 N (수평 막대)
 # ═══════════════════════════════════════════════════════════════════
-def top_bottom_n(df, reference_period=None, value_column=None, label_column=None, n=10, mode="both", exclude_aggregates=True, unit="%"):
+def top_bottom_n(df, reference_period=None, value_column=None, label_column=None, n=10, top_n=None, bottom_n=None, mode="both", exclude_aggregates=True, unit="%", **kwargs):
     """
     기준연도(reference_period 필수) 기준 상위 N개 및 하위 N개 항목 추출 및 수평 막대 차트 생성
     """
@@ -566,43 +566,87 @@ def top_bottom_n(df, reference_period=None, value_column=None, label_column=None
 
     # 정렬
     sorted_df = work_df.sort_values(by="_numeric_val", ascending=False)
-    actual_n = min(int(n), used_rows)
+    
+    # 상위/하위 개수 산출 (개별 지정 지원: 예: top_n=10, bottom_n=30)
+    actual_top_n = min(int(top_n if top_n is not None else n), used_rows)
+    actual_bottom_n = min(int(bottom_n if bottom_n is not None else n), used_rows)
 
-    top_df = sorted_df.head(actual_n)
-    bottom_df = sorted_df.tail(actual_n).sort_values(by="_numeric_val", ascending=True)
+    top_df = sorted_df.head(actual_top_n)
+    bottom_df = sorted_df.tail(actual_bottom_n).sort_values(by="_numeric_val", ascending=True)
 
     top_list = [
         {"rank": i + 1, "label": str(r[label_col]), "value": sanitize_val(r["_numeric_val"])}
         for i, (_, r) in enumerate(top_df.iterrows())
     ]
     bottom_list = [
-        {"rank": used_rows - i, "label": str(r[label_col]), "value": sanitize_val(r["_numeric_val"])}
-        for i, (_, r) in enumerate(bottom_df.iterrows())
+        {"rank": used_rows - actual_bottom_n + i + 1, "label": str(r[label_col]), "value": sanitize_val(r["_numeric_val"])}
+        for i, (_, r) in enumerate(bottom_df.sort_values(by="_numeric_val", ascending=False).iterrows())
     ]
 
-    # 차트 데이터 (수평 막대: Chart.js indexAxis: 'y')
-    chart_labels = [item["label"] for item in top_list]
-    chart_values = [item["value"] for item in top_list]
+    # 모드 판별: mode 파라미터 또는 top_n/bottom_n 존재 여부
+    is_both = (mode == "both") or ("bottom_n" in kwargs and "top_n" in kwargs) or ("하위" in str(kwargs.get("intent", "")))
+
+    if is_both:
+        # 상위와 하위를 한 차트에 합치되 색상과 라벨로 명확히 분리
+        combined_labels = []
+        combined_values = []
+        combined_colors = []
+
+        for item in top_list:
+            combined_labels.append(f"[{item['rank']}위] {item['label']}")
+            combined_values.append(item["value"])
+            combined_colors.append("#2563eb")  # 상위는 신뢰감 있는 파란색
+
+        for item in reversed(bottom_list):  # 최하위부터 위로
+            combined_labels.append(f"[{item['rank']}위] {item['label']}")
+            combined_values.append(item["value"])
+            combined_colors.append("#ef4444")  # 하위는 대비되는 빨간색
+
+        chart_data = {
+            "type": "bar",
+            "indexAxis": "y",
+            "labels": combined_labels,
+            "datasets": [{
+                "label": f"{target_period}년 상위 {actual_top_n}개(파랑) & 하위 {actual_bottom_n}개(빨강) ({unit})",
+                "data": combined_values,
+                "backgroundColor": combined_colors,
+                "borderWidth": 1
+            }]
+        }
+    elif mode == "bottom":
+        chart_data = {
+            "type": "bar",
+            "indexAxis": "y",
+            "labels": [f"[{item['rank']}위] {item['label']}" for item in bottom_list],
+            "datasets": [{
+                "label": f"{target_period}년 하위 {actual_bottom_n} ({unit})",
+                "data": [item["value"] for item in bottom_list],
+                "backgroundColor": "#ef4444"
+            }]
+        }
+    else:
+        chart_data = {
+            "type": "bar",
+            "indexAxis": "y",
+            "labels": [f"[{item['rank']}위] {item['label']}" for item in top_list],
+            "datasets": [{
+                "label": f"{target_period}년 상위 {actual_top_n} ({unit})",
+                "data": [item["value"] for item in top_list],
+                "backgroundColor": "#2563eb"
+            }]
+        }
 
     return {
         "tool": "top_bottom_n",
         "result": {
             "reference_period": target_period,
-            "n": actual_n,
+            "top_n_count": actual_top_n,
+            "bottom_n_count": actual_bottom_n,
             "top_n": top_list,
             "bottom_n": bottom_list,
             "total_ranked_entities": used_rows
         },
-        "chart_data": {
-            "type": "bar",
-            "indexAxis": "y",
-            "labels": chart_labels,
-            "datasets": [{
-                "label": f"{target_period}년 상위 {actual_n} ({unit})",
-                "data": chart_values,
-                "backgroundColor": "#2563eb"
-            }]
-        },
+        "chart_data": chart_data,
         "reference_period": target_period,
         "used_rows": used_rows,
         "excluded_rows": excluded_count,
